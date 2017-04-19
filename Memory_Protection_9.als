@@ -931,20 +931,18 @@ assert C_GenStack2_GenStack{
 
 //-----------------------------------------------------------------------------------------------------------------------------------
 run P_All{
-	all req026,req086,req207,req196,req208,req355,req087,
-		req195,req356: Request, app1: NonTrusted, app, app2: OS_App, 
+	all req: Request, app1: NonTrusted, app, app2: OS_App, 
 			obj, obj1, obj2:OS_Object |
-		(P_026[req026, app1, app2] implies req026.per[Request] = May_Prevent) and
-		(P_086[req086, app] implies req086.per[Request] = Shall_Permit) and
-		(P_207[req207, app1, app2] implies req207.per[Request] = Shall_Prevent) and
-		(P_196[req196, obj] implies req196.per[Request] = Shall_Permit) and
-		(P_208[req208, app, obj1, obj2] implies req208.per[Request] = May_Prevent) and
-		(P_355[req355, app, obj] implies req355.per[Request] = Shall_Prevent) and
-		(P_087[req087, obj] implies req087.per[Request] = Shall_Permit) and
-		(P_195[req195, app, obj1, obj2] implies req195.per[Request] = May_Prevent) and
-		(P_356[req356, app1, app2] implies req356.per[Request] = Shall_Prevent) 
-
-} 
+		(P_026[req, app1, app2] implies req.per[Request] = May_Prevent) and
+		(P_086[req, app] implies req.per[Request] = Shall_Permit) and
+		(P_207[req, app1, app2] implies req.per[Request] = Shall_Prevent) and
+		(P_196[req, obj] implies req.per[Request] = Shall_Permit) and
+		(P_208[req, app, obj1, obj2] implies req.per[Request] = May_Prevent) and
+		(P_355[req, app, obj] implies req.per[Request] = Shall_Prevent) and
+		(P_087[req, obj] implies req.per[Request] = Shall_Permit) and
+		(P_195[req, app, obj1, obj2] implies req.per[Request] = May_Prevent) and
+		(P_356[req, app1, app2] implies req.per[Request] = Shall_Prevent) 
+} for 8 but 2 OS_App
 run P_GenStack2_GenStack{
 	all reqGS2: Request,app: OS_App, obj1, obj2:OS_Object|
 		(P_GenStack2[reqGS2, app, obj1, obj2] implies reqGS2.per[Request]=Shall_Prevent) and

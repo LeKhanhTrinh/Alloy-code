@@ -3,8 +3,8 @@ module mem_pro_9
 //An object in the operating system
 abstract sig OS_Object {
 	parent: lone OS_App,
-	ownDS: lone DataSections,
-	ownSt: lone Stacks
+	Data_Sect: lone DataSections,
+	Stack: lone Stacks
 }
 
 //An application in the operating system
@@ -12,16 +12,16 @@ sig OS_App extends OS_Object{
 	contains: some OS_Object
 } {	
 	no parent
-	lone ownDS
-	no ownSt
+	lone Data_Sect
+	no Stack
 	}
 
 sig Trusted, NonTrusted extends OS_App {} 
 
 //A Task or ISR
 sig Task, ISR extends OS_Object{} {
-	one ownDS
-	one ownSt
+	one Data_Sect
+	one Stack
 }
 sig Cate_1, Cate_2 extends ISR{}
 
@@ -32,17 +32,46 @@ fact{
 	//An OS_Object is the parent of what is contained
 	all app: OS_App, cont: app.contains |
 		cont.parent = app
-	all obj: OS_Object,  ownds: obj.ownDS |
-		ownds.belongTo = obj
-	all obj: OS_Object,  ownst: obj.ownSt |
-		ownst.belongTo = obj
-
-	//no need to share stack
-	//all obj1, obj2: OS_Object |
-	//	obj1.ownSt != obj2.ownSt
+	all obj: OS_Object,  ds: obj.Data_Sect |
+		ds.belongTo = obj
+	all obj: OS_Object,  stk: obj.Stack |
+		stk.belongTo = obj
 
 	//OS_Object including Tasks, ISRs, and OS_Apps
 	Task + ISR + OS_App = OS_Object
+}
+
+fact General_Description{
+	/**
+		OS-Application’s  private  data  sections  are  shared  by  all 
+		Tasks/ISRs belonging to that OS-Application
+	*/
+	//Gen1: From obj to the App.data
+	all req: Request, app: OS_App, obj: OS_Object | 
+		P_SameApp[req, app, obj] implies req.per[Request] = Shall_Permit
+
+	//Gen2: From obj to the App2.data
+	all req: Request, app1, app2: OS_App, obj: OS_Object | 
+		P_DiffApp[req, app1, app2, obj] implies req.per[Request] = Shall_Prevent
+
+	/**
+		The  stack  belongs only to the owner object and 
+		no  need  to  share  stack  data  between  objects
+	*/
+	//Gen3: From app to obj.stack
+	all req: Request, app: OS_App, obj: OS_Object | 
+		P_GenStack[req, app, obj] implies req.per[Request] = May_Permit
+	
+	//Gen5: From obj1 to obj2 stack
+	all req: Request, app: OS_App, obj1, obj2: OS_Object | 
+		P_GenStack2[req, app, obj1, obj2] implies req.per[Request] = Shall_Prevent
+	
+	/**
+		Application may permit to access its own object's data sections
+	*/
+	//Gen4: From app to obj.data
+	all req: Request, app: OS_App, obj: OS_Object | 
+		P_GenData[req, app, obj] implies req.per[Request] = May_Permit
 }
 
 //Memory of an applications or object
@@ -54,7 +83,8 @@ sig DataSections, Stacks extends Memory{
 
 //System status
 abstract sig Status{}
-one sig May_Prevent, May_Permit, Shall_Prevent,  Shall_Permit extends Status{}
+one sig May_Prevent, May_Permit, 
+	Shall_Prevent,  Shall_Permit extends Status{}
 
 abstract sig Action{}
 one sig Read, Write extends Action{}
@@ -67,10 +97,14 @@ sig Request{
 	per: Request -> Status
 }
 
+//Create the initialization for model
 one sig Start{
 	empty: one OS_App
 }
 
+fact Initialization{
+	OS_App in (Start.empty).*{x: OS_App, y: x.contains}
+}
 // ------------------------------------------------------------------------------------------------------------------------
 // 026_086_207_355_356
 fact constraint_set{
@@ -86,14 +120,6 @@ fact constraint_set{
 	all req: Request, app1: NonTrusted, app2: OS_App | 
 		P_207[req, app1, app2] implies req.per[Request] = Shall_Prevent
 
-	//Gen1: From obj to the App.data
-	all req: Request, app: OS_App, obj: OS_Object | 
-		P_SameApp[req, app, obj] implies req.per[Request] = Shall_Permit
-
-	//Gen2: From obj to the App2.data
-	all req: Request, app1, app2: OS_App, obj: OS_Object | 
-		P_DiffApp[req, app1, app2, obj] implies req.per[Request] = Shall_Prevent
-
 	//----------------------------------------------------------------------------------------------------------------
 	//196: From Obj to Obj's Stack
 	all req: Request, obj: OS_Object| 
@@ -107,14 +133,6 @@ fact constraint_set{
 	all req: Request, app: NonTrusted, obj: OS_Object| 
 		P_355[req, app, obj] implies req.per[Request] = Shall_Prevent
 	
-	//Gen3: From app to obj.stack
-	all req: Request, app: OS_App, obj: OS_Object | 
-		P_GenStack[req, app, obj] implies req.per[Request] = May_Permit
-	
-	//Gen5: From obj1 to obj2 stack
-	all req: Request, app: OS_App, obj1, obj2: OS_Object | 
-		P_GenStack2[req, app, obj1, obj2] implies req.per[Request] = Shall_Prevent
-
 	//----------------------------------------------------------------------------------------------------------------
 	//087: From Obj to Obj.Ds
 	all req: Request, obj: OS_Object | 
@@ -128,14 +146,7 @@ fact constraint_set{
 	all req: Request, app1: NonTrusted, app2: OS_App| 
 		P_356[req, app1, app2] implies req.per[Request] = Shall_Prevent
 
-	//Gen4: From app to obj.data
-	all req: Request, app: OS_App, obj: OS_Object | 
-		P_GenData[req, app, obj] implies req.per[Request] = May_Permit
 }
-
-fact OSConstruction { 
-   OS_App in (Start.empty).*{x: OS_App, y: x.contains} 
-} 
 
 //Private data of an OS-APP
 //-----------------------------------------------------------------------------------------------------------------------------------
@@ -144,20 +155,20 @@ fact OSConstruction {
 pred P_086 [req: Request, app: OS_App]{
 	(req.act = Read or req.act = Write) 
 	req.from = app  
-	req.to = app.ownDS 
+	req.to = app.Data_Sect 
 }
 // 207
 //W: From App1 to App2's DS
 pred P_207 [req: Request, app1: NonTrusted, app2: OS_App]{
 	req.from = app1
-	req.to = app2.ownDS
+	req.to = app2.Data_Sect
 	req.act = Write
 }
 // 026
 //R: From App1 to App2's DS
 pred P_026 [req: Request, app1: NonTrusted, app2: OS_App]{
 	req.from = app1
-	req.to = app2.ownDS
+	req.to = app2.Data_Sect
 	req.act = Read
 }
 
@@ -166,7 +177,7 @@ pred P_026 [req: Request, app1: NonTrusted, app2: OS_App]{
 pred P_SameApp[req: Request, app: OS_App, obj: OS_Object]{
 	obj.parent = app
 	req.from = obj
-	req.to = app.ownDS
+	req.to = app.Data_Sect
 	(req.act = Read or req.act = Write)
 }
 
@@ -174,7 +185,7 @@ pred P_SameApp[req: Request, app: OS_App, obj: OS_Object]{
 pred P_DiffApp[req: Request, app1, app2: OS_App, obj: OS_Object]{
 	obj.parent = app1
 	req.from = obj
-	req.to = app2.ownDS
+	req.to = app2.Data_Sect
 	(req.act = Read or req.act = Write)
 }
 
@@ -185,7 +196,7 @@ pred P_DiffApp[req: Request, app1, app2: OS_App, obj: OS_Object]{
 pred P_GenStack[req: Request, app: OS_App, obj: OS_Object]{
 	req.from = app
 	obj.parent = app
-	req.to = obj.ownSt
+	req.to = obj.Stack
 	(req.act = Read or req.act  = Write)
 }
 
@@ -194,7 +205,7 @@ pred P_GenStack[req: Request, app: OS_App, obj: OS_Object]{
 pred P_196 [req: Request, obj: OS_Object]{
 	(req.act = Read or req.act = Write) 
 	req.from = obj  
-	req.to = obj.ownSt 
+	req.to = obj.Stack 
 }
 // 208
 //W: from Obj1 to Obj2's Stack
@@ -206,7 +217,7 @@ pred P_208 [req: Request, app: NonTrusted, obj1, obj2: OS_Object]{
 	(obj1 != obj2) 
 	req.act = Write 
 	req.from = obj1 
-	req.to = obj2.ownSt  
+	req.to = obj2.Stack  
 }
 // 355
 //W: from App to App2.obj.Stack
@@ -215,7 +226,7 @@ pred P_355 [req: Request, app: NonTrusted, obj: OS_Object]{
 	app != obj.parent
 	req.act = Write
 	req.from = app
-	req.to = obj.ownSt
+	req.to = obj.Stack
 }
 
 // 208
@@ -228,7 +239,7 @@ pred P_GenStack2 [req: Request, app: OS_App, obj1, obj2: OS_Object]{
 	(obj1 != obj2) 
 	(req.act = Write or req.act = Read)
 	req.from = obj1 
-	req.to = obj2.ownSt  
+	req.to = obj2.Stack  
 }
 
 //Private data of an Os Object
@@ -238,7 +249,7 @@ pred P_GenStack2 [req: Request, app: OS_App, obj1, obj2: OS_Object]{
 pred P_GenData[req: Request, app: OS_App, obj: OS_Object]{
 	req.from = app
 	obj.parent = app
-	req.to = obj.ownDS
+	req.to = obj.Data_Sect
 	(req.act = Read or req.act  = Write)
 }
 
@@ -247,7 +258,7 @@ pred P_GenData[req: Request, app: OS_App, obj: OS_Object]{
 pred P_087 [req: Request, obj: OS_Object]{
 	(req.act = Read or req.act = Write) 
 	req.from = obj  
-	req.to = obj.ownDS 
+	req.to = obj.Data_Sect 
 }
 
 // 195
@@ -260,13 +271,13 @@ pred P_195 [req: Request, app: NonTrusted, obj1, obj2: OS_Object]{
 	(obj1 != obj2) 
 	(req.act = Write or req.act = Read)
 	req.from = obj1 
-	req.to = obj2.ownDS  
+	req.to = obj2.Data_Sect  
 }
 // 356
 //W: From app1 to app2.DS
 pred P_356 [req: Request, app1: NonTrusted, app2: OS_App]{
 	req.from = app1
-	req.to = app2.ownDS
+	req.to = app2.Data_Sect
 	req.act = Write
 }
 
@@ -925,23 +936,18 @@ assert C_GenStack2_GenStack{
 
 //-----------------------------------------------------------------------------------------------------------------------------------
 run P_All{
-	all req026,req086,req207,reqSA,reqDA,req196,req208,req355,reqGS,reqGS2,req087,
-		req195,req356,reqGD: Request, app1: NonTrusted, app, app2: OS_App, 
+	all req026,req086,req207,req196,req208,req355,req087,
+		req195,req356: Request, app1: NonTrusted, app, app2: OS_App, 
 			obj, obj1, obj2:OS_Object |
 		(P_026[req026, app1, app2] implies req026.per[Request] = May_Prevent) and
 		(P_086[req086, app] implies req086.per[Request] = Shall_Permit) and
 		(P_207[req207, app1, app2] implies req207.per[Request] = Shall_Prevent) and
-		(P_SameApp[reqSA, app, obj] implies reqSA.per[Request] = Shall_Permit) and
-		(P_DiffApp[reqDA, app1, app2, obj] implies reqDA.per[Request] = Shall_Prevent) and 
 		(P_196[req196, obj] implies req196.per[Request] = Shall_Permit) and
 		(P_208[req208, app, obj1, obj2] implies req208.per[Request] = May_Prevent) and
 		(P_355[req355, app, obj] implies req355.per[Request] = Shall_Prevent) and
-		(P_GenStack[reqGS, app, obj] implies reqGS.per[Request] = May_Permit) and
-		(P_GenStack2[reqGS2, app, obj1, obj2] implies reqGS2.per[Request] = Shall_Prevent) and
 		(P_087[req087, obj] implies req087.per[Request] = Shall_Permit) and
 		(P_195[req195, app, obj1, obj2] implies req195.per[Request] = May_Prevent) and
-		(P_356[req356, app1, app2] implies req356.per[Request] = Shall_Prevent) and
-		(P_GenData[reqGD, app, obj] implies reqGD.per[Request] = May_Permit) 
+		(P_356[req356, app1, app2] implies req356.per[Request] = Shall_Prevent) 
 } 
 run P_GenStack2_GenStack{
 	all reqGS2: Request,app: OS_App, obj1, obj2:OS_Object|
