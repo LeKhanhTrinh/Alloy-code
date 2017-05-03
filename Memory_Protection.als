@@ -44,10 +44,13 @@ one sig Read, Write extends Action{}
 sig Request{
 	from: OS_Object,
 	to: Memory,
-	act: Action,
-	per: Status
+	act: Action
+//	per: Status
 }
 
+sig Accession{
+	per: Request -> Status
+}
 /*An OS_App is the parent of what is contained
 All Objects are OS_App, Tasks, and ISR
 */
@@ -64,30 +67,30 @@ fact{
 		OS-Application’s  private  data  sections  are  shared  by  all 
 		Tasks/ISRs belonging to that OS-Application
 	*/
-	all req: Request, app: OS_App, obj: OS_Object |
+	all req: Request, acs: Accession, app: OS_App, obj: OS_Object |
 		obj.parent = app and 
 		req.from = obj and 
 		req.to = app.Data_Sect and
 		(req.act = Read or req.act = Write) and
-		req.per = Shall_Permit
+		acs.per[req] = Shall_Permit
 
 	/**
 		The  stack  belongs only to the owner object and 
 		no  need  to  share  stack  data  between  objects
 	*/
-	all req: Request, obj1, obj2: OS_Object |
+	all req: Request, acs: Accession, obj1, obj2: OS_Object |
 		req.from = obj1 and 
 		req.to = obj2.Stack and
 		(req.act = Read or req.act = Write) and
 		obj1 != obj2 and
-		req.per = Shall_Prevent
-
+		acs.per[req] = Shall_Prevent
 
 	//OS_Object including Tasks, ISRs, and OS_Apps
 	Task + ISR + OS_App = OS_Object
 }
 
 //Create the initialization for model
+/*
 one sig Start{
 	empty: one OS_App
 }
@@ -95,17 +98,18 @@ one sig Start{
 fact Initialization{
 	OS_App in (Start.empty).*{x: OS_App, y: x.contains}
 }
+*/
 // ------------------------------------------------------------------------------------------------------------------------
 // 026_086_207_355_356
 fact constraint_set{
 	//026: From App1 to App2's DS
-	all req: Request, app1: NonTrusted, app2: OS_App | 
-		P_026[req, app1, app2] implies req.per = May_Prevent
+	all req: Request, acs:Accession, app1: NonTrusted, app2: OS_App | 
+		P_026[req, app1, app2] implies acs.per[req] = May_Prevent
 
 	//086: From App to App's Data
-	all req: Request, app: OS_App| 
-		P_086[req, app] implies req.per = Shall_Permit
-
+	all req: Request, acs:Accession, app: OS_App| 
+		P_086[req, app] implies acs.per[req]  = Shall_Permit
+/*
 	//207: From App1 to App2's DS
 	all req: Request, app1: NonTrusted, app2: OS_App | 
 		P_207[req, app1, app2] implies req.per = Shall_Prevent
@@ -135,7 +139,7 @@ fact constraint_set{
 	//356: From app1 to app2.DS
 	all req: Request, app1: NonTrusted, app2: OS_App| 
 		P_356[req, app1, app2] implies req.per = Shall_Prevent
-
+*/
 }
 
 //Private data of an OS-APP
@@ -278,9 +282,9 @@ pred P_356 [req: Request, app1: NonTrusted, app2: OS_App]{
 ////-----------------------------------------------------------------------------------------------------------------------------------
 //Assertions
 assert C_026_086{
-	some req: Request, app1: NonTrusted, app2: OS_App|
-		P_026[req, app1, app2] and 
-		P_086[req, app2] 
+	some req026, req086: Request, app1: NonTrusted, app2: OS_App|
+		P_026[req026, app1, app2] and 
+		P_086[req086, app2] 
 }
 
 //207
@@ -831,27 +835,37 @@ assert C_GenStack2_GenData{
 }
 
 assert C_GenStack2_GenStack{
-	some req: Request,app: OS_App, obj1, obj2:OS_Object|
-		P_GenStack2[req, app, obj1, obj2] and
-		P_GenStack[req, app, obj1] 
+	some req1, req2: Request, app: OS_App, obj1, obj2:OS_Object|
+		P_GenStack2[req1, app, obj1, obj2] and
+		P_GenStack[req2, app, obj1]
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------------
+
 /*
 run P_All{
-	all req,req,req,req,req,req,req,
-		req,req: Request, app1: NonTrusted, app, app2: OS_App, 
+	all req026,req086,req207,req196,req355,req087,req195,req208
+//,req207,req196,req208,req355,req087,req195,req356
+		: Request, acs: Accession, app1: NonTrusted, app: OS_App,
 			obj, obj1, obj2:OS_Object |
-		(P_026[req, app1, app2] implies req.per = May_Prevent) and
-		(P_086[req, app] implies req.per = Shall_Permit) and
-		(P_207[req, app1, app2] implies req.per = Shall_Prevent) and
-		(P_196[req, obj] implies req.per = Shall_Permit) and
-		(P_208[req, app, obj1, obj2] implies req.per = May_Prevent) and
-		(P_355[req, app, obj] implies req.per = Shall_Prevent) and
-		(P_087[req, obj] implies req.per = Shall_Permit) and
-		(P_195[req, app, obj1, obj2] implies req.per = May_Prevent) and
-		(P_356[req, app1, app2] implies req.per = Shall_Prevent) 
-} 
+		(P_026[req026, app1, app] implies acs.per[req026] = May_Prevent) and
+		(P_086[req086, app] implies acs.per[req086] = Shall_Permit) and
+		(P_207[req207, app1, app] implies acs.per[req207] = Shall_Prevent) and
+		(P_196[req196, obj] implies acs.per[req196] = Shall_Permit) and
+		(P_355[req355, app, obj] implies acs.per[req355] = Shall_Prevent) and
+		(P_087[req087, obj] implies acs.per[req087] = Shall_Permit) and
+		(P_195[req195, app, obj1, obj2] implies acs.per[req195] = May_Prevent) and
+		(P_208[req208, app, obj1, obj2] implies acs.per[req208] = May_Prevent) 
+		//(P_208[req208, app, obj1, obj2] implies acs.per[req208] = May_Prevent)
+		/*(P_207[req207, app1, app] implies acs.per[req207] = Shall_Prevent) and
+		(P_196[req196, obj] implies acs.per[req196] = Shall_Permit) and
+		(P_208[req208, app, obj1, obj2] implies acs.per[req208] = May_Prevent) and
+		(P_355[req355, app, obj] implies acs.per[req355] = Shall_Prevent) and
+		(P_087[req087, obj] implies acs.per[req087] = Shall_Permit) and
+		(P_195[req195, app, obj1, obj2] implies acs.per[req195] = May_Prevent) and
+		(P_356[req356, app1, app] implies acs.per[req356] = Shall_Prevent) 
+}
+/*
 run P_GenStack2_GenStack{
 	all req: Request,app: OS_App, obj1, obj2:OS_Object|
 		(P_GenStack2[req, app, obj1, obj2] implies req.per=Shall_Prevent) and
@@ -863,6 +877,7 @@ run P_GenStack2_GenStack{
 
 
 
+/*
 check C_GenStack2_GenStack
 check C_GenStack2_GenData
 check C_GenStack2_207
@@ -954,5 +969,6 @@ check C_SameApp_086
 check C_SameApp_026
 check C_207_026
 check C_207_086
+*/
 check C_026_086
 
